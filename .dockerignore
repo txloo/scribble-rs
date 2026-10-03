@@ -1,23 +1,29 @@
-# We are going with a whitelisting approach, to avoid accidentally bleeding
-# too much into our container. This reduces the amount of cache miss and
-# potentially speeds up the build.
-*
+﻿# Build context for the dev/test image in ./Dockerfile.
+#
+# Unlike upstream's whitelist .dockerignore (which drops *_test.go so the
+# scratch release build stays lean), this one keeps test files: the dev/test
+# container is expected to run `go test -race ./...` against the source.
 
-# All non-test Go Code
-!internal/
-!pkg/
-!cmd/
-**_test.go
+# VCS metadata - the image never needs it, and -buildvcs=false is set
+.git
+.github
 
-# Go Modules
-!go.mod
-!go.sum
+# Authoring tool state
+.opencode
+.opencode_data
 
-# While the dockerfile aren't needed inside of the Dockerfile, fly.io requires
-# them for remote bulding and uses this dockerignore to filter what's sent to
-# the remote builder.
-!linux.Dockerfile
-!windows.Dockerfile
+# Editor / IDE state
+.vscode
+.idea
 
-!public
+# Locally hosted files (see .gitignore - fly.io/fly.toml mount these)
+public
 
+# Build output
+scribblers
+*.exe
+__debug_bin
+
+# Profiling output
+*.pprof
+*.out

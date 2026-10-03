@@ -109,6 +109,23 @@ container and you shouldn't have to change it under normal circumstances.
 
 ## Building / Running
 
+The repository ships a dev/test container, which is the recommended way to work
+on it. Docker Compose mounts the source tree and keeps the Go module cache in
+named volumes, so Go and `go:embed`ed frontend changes take effect on restart:
+
+```shell
+docker compose up app               # serve on http://localhost:8080
+docker compose restart app          # pick up code changes
+docker compose run --rm test        # go test -v -race ./...
+```
+
+Upstream's scratch-based release images (`linux.Dockerfile`,
+`windows.Dockerfile`) are left untouched for anyone who wants them; the
+`Dockerfile` in the repository root is the dev/test image and is not intended to
+be shipped as-is.
+
+To build without a container:
+
 Dependencies:
   * [go](https://go.dev/doc/install) version 1.25.0 or later
   * [git](https://git-scm.com/) (You can also download a .zip from Github)
@@ -184,9 +201,12 @@ Some of these were slightly altered if the license allowed it.
 Treat each of the files in this repository with the same license terms as the
 original file.
 
-* Logo - All rights reserved, excluded from BSD-3 licensing
-* Background - All rights reserved, excluded from BSD-3 licensing
-* Favicon - All rights reserved, excluded from BSD-3 licensing
+* Logo - All rights reserved upstream, excluded from BSD-3 licensing. Replaced
+  here with original placeholder artwork (see below)
+* Background - All rights reserved upstream, excluded from BSD-3 licensing.
+  Replaced here with original placeholder artwork (see below)
+* Favicon - All rights reserved upstream, excluded from BSD-3 licensing.
+  Replaced here with original placeholder artwork (see below)
 * Rubber Icon - Made by [Pixel Buddha](https://www.flaticon.com/authors/pixel-buddha) from [flaticon.com](https://flaticon.com)
 * Fill Bucket Icon - Made by [inipagistudio](https://www.flaticon.com/authors/inipagistudio) from [flaticon.com](https://flaticon.com)
 * Kicking Icon - [Kicking Icon #309402](https://icon-library.net/icon/kicking-icon-4.html)
@@ -202,3 +222,28 @@ original file.
 * [Undo Icon](https://www.iconfinder.com/icons/308948/arrow_undo_icon) - Made by [Ivan Boyko](https://www.iconfinder.com/visualpharm)
 * [Alarmclock Icon](https://www.iconfinder.com/icons/4280508/alarm_outlined_alert_clock_icon) - Made by [Kit of Parts](https://www.iconfinder.com/kitofparts)
 * https://www.iconfinder.com/icons/808399/load_turn_turnaround_icon TODO
+
+### Placeholder media
+
+Upstream's logo, background and favicon are explicitly **not** covered by its
+BSD-3 licence, so they are not distributed here. They have been replaced with
+plain, deliberately generic artwork drawn from scratch by
+`tools/placeholder-assets/generate.pl`:
+
+| File | Size | Notes |
+| --- | --- | --- |
+| `logo.svg` | 1133x208 | Scribble mark + wordmark, drawn on the landing page |
+| `logo.png` | 1600x800 | `og:image` / `twitter:image`; repeats the page gradient |
+| `background.png` | 400x400 | Seamless dot grid for `--scribble-background` |
+| `favicon.svg` | 76x76 | Mark on a rounded white tile |
+| `favicon_16.png` / `_32.png` / `_96.png` | as named | Raster favicons |
+
+Regenerate them with:
+
+```shell
+perl tools/placeholder-assets/generate.pl
+```
+
+The wordmark is rendered in the PNGs with a tiny built-in bitmap font, so it
+looks blocky by design. Swap in real branding by replacing these files (and, if
+you change `logo.svg`, nothing else needs to change).

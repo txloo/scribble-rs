@@ -77,6 +77,43 @@ func GetLanguage(locale string) *Translation {
 	return translationRegistry[locale]
 }
 
+// UILanguage represents a language that the interface can be displayed in.
+type UILanguage struct {
+	// Locale is the identifier used to address the language, e.g. when
+	// storing it in a cookie. It matches the keys of the translation
+	// registry.
+	Locale string
+	// Name is the display name of the language, written in the language
+	// itself, since users can't be expected to understand their own
+	// language being spelled in a foreign one.
+	Name string
+}
+
+// uiLanguages contains all languages that have a translation pack. The
+// default language comes first, the rest is sorted alphabetically by locale.
+var uiLanguages = []UILanguage{
+	{Locale: "en", Name: "English"},
+	{Locale: "ar", Name: "العربية"},
+	{Locale: "de", Name: "Deutsch"},
+	{Locale: "es", Name: "Español"},
+	{Locale: "fa", Name: "فارسی"},
+	{Locale: "fr", Name: "Français"},
+	{Locale: "he", Name: "עברית"},
+	{Locale: "id", Name: "Bahasa Indonesia"},
+	{Locale: "pl", Name: "Polski"},
+}
+
+// GetUILanguages returns all languages that the interface is available in.
+func GetUILanguages() []UILanguage {
+	return uiLanguages
+}
+
+// IsSupportedLanguage reports whether the given locale has a translation pack.
+func IsSupportedLanguage(locale string) bool {
+	_, avail := translationRegistry[locale]
+	return avail
+}
+
 // RegisterTranslation makes adds a language to the registry and makes
 // it available via Get. If the language is already registered, the server
 // panics. This happens on startup, therefore it's safe.

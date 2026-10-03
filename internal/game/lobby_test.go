@@ -388,6 +388,101 @@ func Test_kickDrawer(t *testing.T) {
 	}
 }
 
+func Test_leaveLobby(t *testing.T) {
+	t.Parallel()
+
+	t.Run("leaving player is removed and ownership is handed over", func(t *testing.T) {
+		t.Parallel()
+
+		lobby := &Lobby{
+			EditableLobbySettings: EditableLobbySettings{
+				DrawingTime:  10,
+				Rounds:       10,
+				WordsPerTurn: 3,
+			},
+			ScoreCalculation: ChillScoring,
+			words:            []string{"a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a"},
+		}
+		lobby.WriteObject = noOpWriteObject
+		lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+		marcel := lobby.JoinPlayer("marcel")
+		marcel.Connected = true
+		lobby.OwnerID = marcel.ID
+
+		kevin := lobby.JoinPlayer("kevin")
+		kevin.Connected = true
+
+		if err := lobby.HandleEvent(EventTypeLeaveLobby, nil, marcel); err != nil {
+			t.Errorf("Couldn't process leave event: %s", err)
+		}
+
+		for _, player := range lobby.players {
+			if player == marcel {
+				t.Error("Marcel should've been removed from the lobby")
+			}
+		}
+		if lobby.OwnerID != kevin.ID {
+			t.Errorf("Kevin should've become the owner, but was %s", lobby.OwnerID)
+		}
+		if !kevin.Connected {
+			t.Error("Remaining players should stay connected")
+		}
+	})
+
+	t.Run("drawer leaving hands the turn over", func(t *testing.T) {
+		t.Parallel()
+
+		lobby := &Lobby{
+			EditableLobbySettings: EditableLobbySettings{
+				DrawingTime:  10,
+				Rounds:       10,
+				WordsPerTurn: 3,
+			},
+			ScoreCalculation: ChillScoring,
+			words:            []string{"a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a"},
+		}
+		lobby.WriteObject = noOpWriteObject
+		lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+		marcel := lobby.JoinPlayer("marcel")
+		marcel.Connected = true
+		lobby.OwnerID = marcel.ID
+
+		kevin := lobby.JoinPlayer("kevin")
+		kevin.Connected = true
+		chantal := lobby.JoinPlayer("chantal")
+		chantal.Connected = true
+
+		if err := lobby.HandleEvent(EventTypeStart, nil, marcel); err != nil {
+			t.Errorf("Couldn't start lobby: %s", err)
+		}
+
+		if lobby.Drawer() != marcel {
+			t.Errorf("Drawer should've been marcel, but was %s", lobby.Drawer().Name)
+		}
+
+		if err := lobby.HandleEvent(EventTypeLeaveLobby, nil, marcel); err != nil {
+			t.Errorf("Couldn't process leave event: %s", err)
+		}
+
+		if lobby.Drawer() == nil {
+			t.Error("There should be a new drawer after the previous one left")
+		} else if lobby.Drawer() != kevin {
+			t.Errorf("Drawer should've been kevin, but was %s", lobby.Drawer().Name)
+		}
+
+		for _, player := range lobby.players {
+			if player == marcel {
+				t.Error("Marcel should've been removed from the lobby")
+			}
+		}
+		if len(lobby.players) != 2 {
+			t.Errorf("Lobby should have 2 players left, but has %d", len(lobby.players))
+		}
+	})
+}
+
 func Test_lobby_calculateDrawerScore(t *testing.T) {
 	t.Parallel()
 

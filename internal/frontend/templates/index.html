@@ -181,6 +181,16 @@
         </div>
 
         <footer>
+            <label class="footer-item" for="ui-language-select">
+                {{.Translation.Get "ui-language"}}:
+            </label>
+            <select id="ui-language-select" class="footer-item">
+                {{$locale := .Locale}}
+                {{range .UILanguages}}
+                <option value="{{.Locale}}" label="{{.Name}}"
+                    {{if eq $locale .Locale}}selected{{end}}>{{.Name}}</option>
+                {{end}}
+            </select>
             {{template "footer" .}}
         </footer>
 

@@ -19,6 +19,10 @@ const (
 	EventTypeRequestDrawing  = "request-drawing"
 	EventTypeChooseWord      = "choose-word"
 	EventTypeUndo            = "undo"
+	// EventTypeLeaveLobby makes the sending player leave the lobby. This
+	// behaves like a disconnect, but is immediate and communicated to the
+	// remaining players.
+	EventTypeLeaveLobby = "leave-lobby"
 )
 
 // Events that are outgoing only.
@@ -44,6 +48,12 @@ const (
 	EventTypeLobbySettingsChanged     = "lobby-settings-changed"
 	EventTypeShutdown                 = "shutdown"
 	EventTypeKeepAlive                = "keep-alive"
+	// EventTypePlayerLeft announces that a player left the lobby on their
+	// own, as opposed to being disconnected or kick-voted.
+	EventTypePlayerLeft = "player-left"
+	// EventTypeLobbyClosed tells all players that the lobby has been closed
+	// (deleted) by its owner, so they should leave instead of reconnecting.
+	EventTypeLobbyClosed = "lobby-closed"
 )
 
 // Events that are bidirectional.
@@ -139,7 +149,15 @@ type KickVote struct {
 	RequiredVoteCount int       `json:"requiredVoteCount"`
 }
 
+// OwnerChangeEvent informs clients about a change of ownership.
 type OwnerChangeEvent struct {
+	PlayerName string    `json:"playerName"`
+	PlayerID   uuid.UUID `json:"playerId"`
+}
+
+// PlayerLeft announces that a player deliberately left the lobby. The name is
+// included, since the player won't be part of any players list anymore.
+type PlayerLeft struct {
 	PlayerName string    `json:"playerName"`
 	PlayerID   uuid.UUID `json:"playerId"`
 }

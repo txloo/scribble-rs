@@ -1,0 +1,63 @@
+# Dev/test environment for the pictionary app. This is the run target - the app
+# is served from the mounted source tree, so Go code and go:embed'd frontend
+# changes are picked up on `docker compose restart app`.
+#
+#   docker compose up app      # serve on http://localhost:8080
+#   docker compose run --rm test   # go test -v -race ./...
+
+services:
+  app:
+    # Named so the test service below shares one build instead of producing a
+    # second, duplicate image tag.
+    image: pictionary-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Bind to all interfaces so players on your LAN can join
+    # http://<your-host>:8080. Use "127.0.0.1:8080:8080" to keep it local.
+    ports:
+      - "8080:8080"
+    volumes:
+      # Source tree, mounted last so it shadows the image's copy of the code.
+      - .:/app
+      # Module cache lives outside /app, so it survives both the source mount
+      # and container recreation. First run seeds these volumes from the
+      # `go mod download` layer baked into the image.
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    environment:
+      PORT: "8080"
+    # go run does not forward signals reliably; tini reaps and forwards them.
+    init: true
+    stdin_open: true
+    tty: true
+    # GET /health is registered by cmd/scribblers/main.go.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # `go run` compiles on first start, so give it room before failing.
+      start_period: 90s
+
+  # Opt-in test runner: `docker compose run --rm test`
+  # Behind a profile so plain `docker compose up` never runs it.
+  test:
+    image: pictionary-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - test
+    volumes:
+      - .:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    # -count=1 defeats Go's test result cache, so you always see fresh runs.
+    # Upstream CI uses -count=3 to shake out flakiness; match that with:
+    #   docker compose run --rm test go test -v -race -count=3 ./...
+    command: ["go", "test", "-v", "-race", "-count=1", "./..."]
+
+volumes:
+  go-mod-cache:
+  go-build-cache:

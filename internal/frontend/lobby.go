@@ -18,6 +18,8 @@ type lobbyPageData struct {
 
 	Translation *translations.Translation
 	Locale      string
+	// UILanguages powers the interface language switcher in the menu.
+	UILanguages []translations.UILanguage
 }
 
 type lobbyJsData struct {
@@ -110,6 +112,7 @@ func (handler *SSRHandler) ssrEnterLobbyNoChecks(
 			LobbyData:      api.CreateLobbyData(handler.cfg, lobby),
 			Translation:    translation,
 			Locale:         locale,
+			UILanguages:    translations.GetUILanguages(),
 		}
 	})
 
@@ -123,7 +126,50 @@ func (handler *SSRHandler) ssrEnterLobbyNoChecks(
 	}
 }
 
+// LanguageCookieName is the cookie that stores the interface language the
+// user picked themselves. It takes precedence over Accept-Language.
+const LanguageCookieName = "ui-language"
+
+// setLanguage stores the requested language in a cookie and redirects the
+// user back to where they came from, so that the change takes effect on the
+// next page load.
+func (handler *SSRHandler) setLanguage(writer http.ResponseWriter, request *http.Request) {
+	language := strings.ToLower(request.URL.Query().Get("language"))
+	if !translations.IsSupportedLanguage(language) {
+		http.Error(writer, "unsupported language", http.StatusBadRequest)
+		return
+	}
+
+	// Only local paths may be redirected to, otherwise this endpoint could
+	// be abused for phishing via open redirects.
+	redirectTarget := request.URL.Query().Get("redirect")
+	if redirectTarget == "" || !strings.HasPrefix(redirectTarget, "/") || strings.HasPrefix(redirectTarget, "//") {
+		redirectTarget = handler.basePageConfig.RootPath + "/"
+	}
+
+	// One year, since it's an explicit user choice that shouldn't silently
+	// revert while playing regularly.
+	http.SetCookie(writer, &http.Cookie{
+		Name:     LanguageCookieName,
+		Value:    language,
+		Path:     "/",
+		MaxAge:   365 * 24 * 60 * 60,
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	http.Redirect(writer, request, redirectTarget, http.StatusSeeOther)
+}
+
 func determineTranslation(r *http.Request) (*translations.Translation, string) {
+	// A language that the user picked themselves always wins over what the
+	// browser requests.
+	if languageCookie, cookieErr := r.Cookie(LanguageCookieName); cookieErr == nil {
+		locale := strings.ToLower(languageCookie.Value)
+		if translation := translations.GetLanguage(locale); translation != nil {
+			return translation, locale
+		}
+	}
+
 	languageTags, _, err := language.ParseAcceptLanguage(r.Header.Get("Accept-Language"))
 	if err == nil {
 		for _, languageTag := range languageTags {

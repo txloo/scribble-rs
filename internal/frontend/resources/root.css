@@ -63,6 +63,9 @@ footer,
 }
 
 footer {
+    /* Items must wrap instead of forcing horizontal scrolling on small
+       screens, e.g. on mobile. */
+    flex-wrap: wrap;
     padding: 0.1rem;
     background-color: lightslategray;
     color: white;
@@ -132,6 +135,13 @@ input,
 select {
     padding-left: 0.35rem;
     padding-right: 0.35rem;
+}
+
+/* The footer renders its items in white; without an explicit color the
+   select's white background would make inherited white text unreadable. */
+#ui-language-select {
+    color: #222;
+    padding: 0.3rem 0.5rem;
 }
 
 textarea {

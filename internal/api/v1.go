@@ -291,6 +291,36 @@ func SetGameplayCookies(
 	})
 }
 
+// closeLobby closes (deletes) the requested lobby. This is owner-only, since
+// closing affects every player in the lobby, not just the requesting one.
+func (handler *V1Handler) closeLobby(writer http.ResponseWriter, request *http.Request) {
+	userSession, err := GetUserSession(request)
+	if err != nil {
+		log.Printf("error getting user session: %v", err)
+		http.Error(writer, "no valid usersession supplied", http.StatusBadRequest)
+		return
+	}
+
+	if userSession == uuid.Nil {
+		http.Error(writer, "no usersession supplied", http.StatusBadRequest)
+		return
+	}
+
+	lobby := state.GetLobby(GetLobbyId(request))
+	if lobby == nil {
+		http.Error(writer, ErrLobbyNotExistent.Error(), http.StatusNotFound)
+		return
+	}
+
+	owner := lobby.GetOwner()
+	if owner == nil || owner.GetUserSession() != userSession {
+		http.Error(writer, "only the lobby owner can close the lobby", http.StatusForbidden)
+		return
+	}
+
+	state.CloseLobby(lobby.LobbyID)
+}
+
 func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.Request) {
 	userSession, err := GetUserSession(request)
 	if err != nil {

@@ -129,11 +129,45 @@ func GetPublicLobbies() []*game.Lobby {
 }
 
 // RemoveLobby deletes a lobby, not allowing anyone to connect to it again.
+// Note that connected players are NOT notified, see CloseLobby for that.
 func RemoveLobby(id string) {
 	globalStateMutex.Lock()
 	defer globalStateMutex.Unlock()
 
 	removeLobby(id)
+}
+
+// CloseLobby informs all connected players that the lobby has been closed,
+// so they can navigate away instead of trying to reconnect, and then removes
+// the lobby from the state. It reports whether a lobby with the given ID was
+// found.
+func CloseLobby(id string) bool {
+	globalStateMutex.RLock()
+	var target *game.Lobby
+	for _, lobby := range lobbies {
+		if lobby.LobbyID == id {
+			target = lobby
+			break
+		}
+	}
+	globalStateMutex.RUnlock()
+
+	if target == nil {
+		return false
+	}
+
+	// Notify players before removing the lobby, since a lobby that's no
+	// longer registered can't broadcast to its players anymore. This is
+	// intentionally done while NOT holding the global state mutex, as the
+	// broadcast acquires the lobby mutex. The lock ordering
+	// state -> lobby must not be established here, since it doesn't exist
+	// anywhere else in the codebase.
+	target.Close()
+
+	// The lobby may have been removed in the meantime (e.g. by the cleanup
+	// routine), which is fine, since removal is a no-op then.
+	RemoveLobby(id)
+	return true
 }
 
 func removeLobby(id string) {

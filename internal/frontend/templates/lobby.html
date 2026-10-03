@@ -90,6 +90,30 @@
                                         class="header-button-image" />
                                     {{.Translation.Get "votekick-a-player"}}
                                 </button>
+                                <button id="leave-button" class="dialog-button menu-item header-button"
+                                    alt="{{.Translation.Get "leave-lobby"}}"
+                                    title="{{.Translation.Get "leave-lobby"}}">
+                                    <img src='{{.RootPath}}/resources/{{.WithCacheBust "leave.svg"}}'
+                                        class="header-button-image" />
+                                    {{.Translation.Get "leave-lobby"}}
+                                </button>
+                                <button id="close-lobby-button" style="display: none;"
+                                    class="dialog-button menu-item header-button"
+                                    alt="{{.Translation.Get "close-lobby"}}"
+                                    title="{{.Translation.Get "close-lobby"}}">
+                                    <img src='{{.RootPath}}/resources/{{.WithCacheBust "trash.svg"}}'
+                                        class="header-button-image" />
+                                    {{.Translation.Get "close-lobby"}}
+                                </button>
+                                <label for="ui-language-select"
+                                    class="menu-item">{{.Translation.Get "ui-language"}}</label>
+                                <select id="ui-language-select" class="menu-item">
+                                    {{$locale := .Locale}}
+                                    {{range .UILanguages}}
+                                    <option value="{{.Locale}}" label="{{.Name}}"
+                                        {{if eq $locale .Locale}}selected{{end}}>{{.Name}}</option>
+                                    {{end}}
+                                </select>
                                 <button id="lobby-settings-button" style="display: none;"
                                     class="dialog-button menu-item header-button"
                                     alt="{{.Translation.Get "change-lobby-settings-tooltip"}}"

@@ -31,6 +31,7 @@ var SupportedLanguages = map[string]string{
 	"english":    "English (US)",
 	"italian":    "Italian",
 	"german":     "German",
+	"spanish":    "Spanish",
 	"french":     "French",
 	"dutch":      "Dutch",
 	"ukrainian":  "Ukrainian",
@@ -202,6 +203,8 @@ func (lobby *Lobby) HandleEvent(eventType string, payload []byte, player *Player
 		if len(lobby.currentDrawing) != 0 {
 			_ = lobby.WriteObject(player, Event{Type: EventTypeDrawing, Data: lobby.currentDrawing})
 		}
+	} else if eventType == EventTypeLeaveLobby {
+		handleLeaveLobbyEvent(lobby, player)
 	}
 
 	return nil
@@ -554,6 +557,96 @@ func (lobby *Lobby) Drawer() *Player {
 		}
 	}
 	return nil
+}
+
+// closeCodeLeft is a custom websocket close code signalling that the player
+// left the lobby on purpose. Codes 4000-4999 are free for application use,
+// so this doesn't collide with the specification. 4000 is already used for
+// kicks, hence the next free code.
+const closeCodeLeft = 4001
+
+// handleLeaveLobbyEvent removes the sending player from the lobby, freeing
+// their player slot for other players again. Must be called while holding the
+// lobby mutex.
+func handleLeaveLobbyEvent(lobby *Lobby, player *Player) {
+	for index, otherPlayer := range lobby.players {
+		if otherPlayer.ID == player.ID {
+			removeLeftPlayer(lobby, otherPlayer, index)
+			return
+		}
+	}
+	// Reaching this point means the player isn't part of the lobby, e.g.
+	// because they already left. There's nothing to do in that case.
+}
+
+// removeLeftPlayer is the leave-lobby equivalent of kickPlayer. In contrast
+// to kicking, no scores are redacted, since leaving is not a punishable
+// offense. Must be called while holding the lobby mutex.
+func removeLeftPlayer(lobby *Lobby, removedPlayer *Player, index int) {
+	// Disconnect the leaving player right away, so that OnPlayerDisconnect
+	// short circuits and doesn't run for this player anymore. This also
+	// prevents them from receiving any of the events below.
+	if socket := removedPlayer.ws; socket != nil {
+		socket.WriteClose(closeCodeLeft, nil)
+	}
+	removedPlayer.ws = nil
+	removedPlayer.Connected = false
+
+	// Clean up any kick votes related to the leaving player.
+	for _, otherPlayer := range lobby.players {
+		delete(otherPlayer.votedForKick, removedPlayer.ID)
+	}
+
+	// If the owner is the one leaving, we hand over the lobby to the next
+	// best connected player.
+	if lobby.OwnerID == removedPlayer.ID {
+		for _, otherPlayer := range lobby.players {
+			potentialOwner := otherPlayer
+			if potentialOwner.Connected && potentialOwner.ID != removedPlayer.ID {
+				lobby.OwnerID = potentialOwner.ID
+				lobby.Broadcast(&Event{
+					Type: EventTypeOwnerChange,
+					Data: &OwnerChangeEvent{
+						PlayerID:   potentialOwner.ID,
+						PlayerName: potentialOwner.Name,
+					},
+				})
+				break
+			}
+		}
+	}
+
+	lobby.Broadcast(&Event{
+		Type: EventTypePlayerLeft,
+		Data: &PlayerLeft{
+			PlayerID:   removedPlayer.ID,
+			PlayerName: removedPlayer.Name,
+		},
+	})
+
+	if removedPlayer.State == Drawing {
+		// determineNextDrawer requires the drawer to still be part of the
+		// player slice, hence this happening before the removal.
+		newDrawer, roundOver := determineNextDrawer(lobby)
+		lobby.players = append(lobby.players[:index], lobby.players[index+1:]...)
+		advanceLobbyPredefineDrawer(lobby, roundOver, newDrawer)
+	} else {
+		lobby.players = append(lobby.players[:index], lobby.players[index+1:]...)
+
+		if lobby.State != Ongoing {
+			// The game hasn't started yet, so leaving can't interrupt a
+			// turn and the lobby state stays as it is.
+			recalculateRanks(lobby)
+			lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+		} else if lobby.isAnyoneStillGuessing() {
+			// This isn't necessary in case we need to advance the lobby, as it
+			// has to happen anyways and sending events twice would be wasteful.
+			recalculateRanks(lobby)
+			lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+		} else {
+			advanceLobby(lobby)
+		}
+	}
 }
 
 func calculateVotesNeededToKick(lobby *Lobby) int {
@@ -1239,6 +1332,18 @@ func (lobby *Lobby) Shutdown() {
 	log.Println("Lobby Shutdown: Mutex acquired")
 
 	lobby.Broadcast(&EventTypeOnly{Type: EventTypeShutdown})
+}
+
+// Close informs all connected players that the lobby has been closed, e.g.
+// by its owner, allowing clients to navigate away instead of trying to
+// reconnect. The caller is responsible for removing the lobby from the state
+// afterwards, otherwise players could still join the now closing lobby.
+func (lobby *Lobby) Close() {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+	log.Printf("Closing lobby %s\n", lobby.LobbyID)
+
+	lobby.Broadcast(&EventTypeOnly{Type: EventTypeLobbyClosed})
 }
 
 // ScoreCalculation allows having different scoring systems for a lobby.

@@ -1,5 +1,15 @@
 const rootPath = `{{.RootPath}}`;
 
+// Changing the language reloads the page via the set-language endpoint,
+// which stores the choice in a cookie and sends us back to where we were.
+document.getElementById("ui-language-select").addEventListener("change", (event) => {
+    const redirect = encodeURIComponent(
+        location.pathname + location.search,
+    );
+    document.location.href =
+        `${rootPath}/set-language?language=${event.target.value}&redirect=${redirect}`;
+});
+
 Array.from(document.getElementsByClassName("number-input")).forEach(
     (number_input) => {
         const input = number_input.children.item(1);

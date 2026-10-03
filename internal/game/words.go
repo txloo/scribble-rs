@@ -42,6 +42,10 @@ var (
 			LanguageCode: "de",
 			Lowercaser:   func() cases.Caser { return cases.Lower(language.German) },
 		},
+		"spanish": {
+			LanguageCode: "es",
+			Lowercaser:   func() cases.Caser { return cases.Lower(language.Spanish) },
+		},
 		"french": {
 			LanguageCode: "fr",
 			Lowercaser:   func() cases.Caser { return cases.Lower(language.French) },

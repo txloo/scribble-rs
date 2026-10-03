@@ -26,6 +26,11 @@ func (handler *V1Handler) SetupRoutes(rootPath string, register func(string, str
 	// We support both path parameter and cookie.
 	register("PATCH", path.Join(v1, "lobby"), handler.patchLobby)
 
+	// Closing is owner-only and therefore requires the lobby to be
+	// identified, either via path parameter or cookie.
+	register("POST", path.Join(v1, "lobby", "{lobby_id}", "close"), handler.closeLobby)
+	register("POST", path.Join(v1, "lobby", "close"), handler.closeLobby)
+
 	// The websocket is shared between the public API and the official client
 	register("GET", path.Join(v1, "lobby", "{lobby_id}", "ws"), handler.websocketUpgrade)
 	// We support both path parameter and cookie.

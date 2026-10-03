@@ -43,9 +43,20 @@ func initEnglishTranslation() *Translation {
 
 	translation.put("drawer-kicked", "Since the kicked player has been drawing, none of you will get any points this round.")
 	translation.put("self-kicked", "You have been kicked")
+	translation.put("self-kicked-text", "You have been kicked from the lobby.")
 	translation.put("kick-vote", "(%s/%s) players voted to kick %s.")
 	translation.put("player-kicked", "Player has been kicked.")
 	translation.put("owner-change", "%s is the new lobby owner.")
+
+	translation.put("leave-lobby", "Leave lobby")
+	translation.put("left-the-lobby", "%s left the lobby.")
+	translation.put("close-lobby", "Close lobby")
+	// Keys that are interpolated into string literals of the official web
+	// client (lobby.js, index.js) must not contain apostrophes, since Go's
+	// text/template has no JS-context aware escaping.
+	translation.put("close-lobby-error", "The lobby could not be closed. Are you still its owner?")
+	translation.put("lobby-closed-title", "Lobby closed")
+	translation.put("lobby-closed-text", "The lobby has been closed by its owner.")
 
 	translation.put("change-lobby-settings-tooltip", "Change the lobby settings")
 	translation.put("change-lobby-settings-title", "Lobby settings")
@@ -56,6 +67,7 @@ func initEnglishTranslation() *Translation {
 	translation.put("chill-alt", "While being fast is rewarded, it's not too bad if you are little slower.\nThe base score is rather high, focus on having fun!")
 	translation.put("competitive-alt", "The faster you are, the more points you will get.\nThe base score is a lot lower and the decline is faster.")
 	translation.put("score-calculation", "Scoring")
+	translation.put("ui-language", "Language")
 	translation.put("word-language", "Language")
 	translation.put("drawing-time-setting", "Drawing Time")
 	translation.put("rounds-setting", "Rounds")

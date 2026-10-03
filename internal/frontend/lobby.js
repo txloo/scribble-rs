@@ -74,6 +74,9 @@ const wordButtonContainer = document.getElementById("word-button-container");
 const kickDialog = document.getElementById("kick-dialog");
 const kickDialogPlayers = document.getElementById("kick-dialog-players");
 
+const leaveButton = document.getElementById("leave-button");
+const closeLobbyButton = document.getElementById("close-lobby-button");
+
 const soundToggleLabel = document.getElementById("sound-toggle-label");
 let sound = localStorage.getItem("sound") !== "false";
 updateSoundIcon();
@@ -308,6 +311,53 @@ function showLobbySettingsDialog() {
     lobbySettingsDialog.style.visibility = "visible";
 }
 lobbySettingsButton.addEventListener("click", showLobbySettingsDialog);
+
+function leaveLobby() {
+    // Prevent the reconnect dialog from appearing while we navigate away.
+    if (socket) {
+        socket.onclose = null;
+        socket.onerror = null;
+        if (socket.readyState === WebSocket.OPEN) {
+            // Inform the server, so that our player slot is freed up right
+            // away instead of after the disconnect timeout.
+            socket.send(JSON.stringify({ type: "leave-lobby" }));
+            socket.close();
+        }
+    }
+    document.location.href = "{{.RootPath}}/";
+}
+leaveButton.addEventListener("click", leaveLobby);
+
+function closeLobby() {
+    hideMenu();
+    fetch(`${rootPath}/v1/lobby/close`, { method: "POST" })
+        .then((response) => {
+            if (!response.ok) {
+                console.error("Error closing lobby: ", response.status);
+                showTextDialog(
+                    "close-lobby-error-dialog",
+                    '{{.Translation.Get "close-lobby"}}',
+                    '{{.Translation.Get "close-lobby-error"}}',
+                );
+            }
+            // On success the server broadcasts lobby-closed, which navigates
+            // everyone away, including us.
+        })
+        .catch((error) => {
+            console.error("Error closing lobby: ", error);
+        });
+}
+closeLobbyButton.addEventListener("click", closeLobby);
+
+// Changing the language reloads the lobby via the set-language endpoint,
+// which stores the choice in a cookie and sends us back to this lobby.
+document.getElementById("ui-language-select").addEventListener("change", (event) => {
+    const redirect = encodeURIComponent(
+        location.pathname + location.search,
+    );
+    document.location.href =
+        `${rootPath}/set-language?language=${event.target.value}&redirect=${redirect}`;
+});
 
 function hideLobbySettingsDialog() {
     lobbySettingsDialog.style.visibility = "hidden";
@@ -1148,6 +1198,32 @@ const handleEvent = (parsed) => {
                 kickMessage,
             );
         }
+    } else if (parsed.type === "player-left") {
+        appendMessage(
+            "system-message",
+            '{{.Translation.Get "system"}}',
+            '{{.Translation.Get "left-the-lobby"}}'.format(
+                parsed.data.playerName,
+            ),
+        );
+    } else if (parsed.type === "lobby-closed") {
+        // Prevent the reconnect dialog, since the lobby is gone for good.
+        socket.onclose = null;
+        socket.close();
+        const homepageButton = createDialogButton(
+            '{{.Translation.Get "click-to-homepage"}}',
+        );
+        homepageButton.onclick = () => {
+            document.location.href = "{{.RootPath}}/";
+        };
+        showDialog(
+            "lobby-closed-dialog",
+            '{{.Translation.Get "lobby-closed-title"}}',
+            document.createTextNode(
+                '{{.Translation.Get "lobby-closed-text"}}',
+            ),
+            createDialogButtonBar(homepageButton),
+        );
     } else if (parsed.type === "owner-change") {
         ownerID = parsed.data.playerId;
         updateButtonVisibilities();
@@ -1369,8 +1445,10 @@ const handleReadyEvent = (ready) => {
 function updateButtonVisibilities() {
     if (ownerID === ownID) {
         lobbySettingsButton.style.display = "flex";
+        closeLobbyButton.style.display = "flex";
     } else {
         lobbySettingsButton.style.display = "none";
+        closeLobbyButton.style.display = "none";
     }
 }
 
@@ -2112,9 +2190,13 @@ const connectToWebsocket = () => {
             if (event.code === 4000) {
                 showTextDialog(
                     reconnectDialogId,
-                    "Kicked",
-                    `You have been kicked from the lobby.`,
+                    '{{.Translation.Get "self-kicked"}}',
+                    `{{.Translation.Get "self-kicked-text"}}`,
                 );
+            } else if (event.code === 4001) {
+                // We left the lobby ourselves, the leave button already
+                // navigates away, so there's nothing left to do here.
+                console.log("Left the lobby.");
             } else {
                 console.log("Attempting to reestablish socket connection.");
                 showReconnectDialogIfNotShown();

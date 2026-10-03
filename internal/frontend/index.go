@@ -147,6 +147,7 @@ func (handler *SSRHandler) createDefaultIndexPageData() *IndexPageData {
 		Languages:            game.SupportedLanguages,
 		ScoreCalculations:    game.SupportedScoreCalculations,
 		LobbySettingDefaults: handler.cfg.LobbySettingDefaults,
+		UILanguages:          translations.GetUILanguages(),
 	}
 }
 
@@ -161,6 +162,9 @@ type IndexPageData struct {
 	Errors            []string
 	Languages         map[string]string
 	ScoreCalculations []string
+	// UILanguages contains all languages the interface itself is available
+	// in, for the language switcher.
+	UILanguages []translations.UILanguage
 }
 
 // ssrCreateLobby allows creating a lobby, optionally returning errors that
@@ -212,6 +216,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 		},
 		Languages:         game.SupportedLanguages,
 		ScoreCalculations: game.SupportedScoreCalculations,
+		UILanguages:       translations.GetUILanguages(),
 	}
 
 	if scoreCalculationInvalid != nil {
