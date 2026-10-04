@@ -30,7 +30,7 @@ jobs:
         with:
           file: linux.Dockerfile
           push: true
-          tags: southamerica-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/scribble-rs/scribble-rs:latest
+          tags: southamerica-east1-docker.pkg.dev/${{ steps.auth.outputs.project_id }}/scribble-rs/scribble-rs:latest
           build-args: VERSION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
