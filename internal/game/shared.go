@@ -214,10 +214,17 @@ type OutgoingMessage struct {
 }
 
 // StoreMessage is an OutgoingMessage enriched with a lobby-scoped monotonic
-// ID, which HTTP chat polling uses as a cursor.
+// ID, which HTTP chat polling uses as a cursor. The translation fields are
+// only set on delivery copies (when chat translation is enabled); the log
+// itself stores originals only.
 type StoreMessage struct {
 	OutgoingMessage
 	ID uint64 `json:"id"`
+	// TranslatedContent is the message translated into the requester's
+	// interface language, if applicable.
+	TranslatedContent string `json:"translatedContent,omitempty"`
+	// SourceLanguage is the language the message was detected to be in.
+	SourceLanguage string `json:"sourceLanguage,omitempty"`
 }
 
 // ReadyEvent represents the initial state that a user needs upon connection.
@@ -238,41 +245,6 @@ type ReadyEvent struct {
 	AllowDrawing       bool        `json:"allowDrawing"`
 }
 
-type Ring[T any] struct {
-	buf  []T
-	head int
-	size int
-}
-
-func NewRing[T any](cap int) *Ring[T] {
-	return &Ring[T]{buf: make([]T, cap /* slice len, not cap */)}
-}
-
-func (r *Ring[T]) Push(v T) {
-	r.buf[r.head] = v
-	r.head = (r.head + 1) % len(r.buf)
-	if r.size < len(r.buf) {
-		r.size++
-	}
-}
-
-func (r *Ring[T]) Oldest() T {
-	if r.size == 0 {
-		var zero T
-		return zero
-	}
-	return r.buf[(r.head-r.size+len(r.buf))%len(r.buf)]
-}
-
-func (r *Ring[T]) Latest() T {
-	if r.size == 0 {
-		var zero T
-		return zero
-	}
-
-	return r.buf[(r.head-1+len(r.buf))%len(r.buf)]
-}
-
 // Player represents a participant in a Lobby.
 type Player struct {
 	// userSession uniquely identifies the player.
@@ -288,11 +260,6 @@ type Player struct {
 	// HTTP, e.g. by polling chat. It marks presence for socketless clients
 	// and must never be exposed via JSON.
 	lastSeen time.Time
-	// lastWallStroke throttles HTTP wall strokes, standing in for the
-	// backpressure a websocket connection would provide.
-	lastWallStroke time.Time
-	// messageTimestamps are stored for ratelimiting reasons. See handleMessage.
-	messageTimestamps *Ring[time.Time]
 
 	// Name is the players displayed name
 	Name  string      `json:"name"`

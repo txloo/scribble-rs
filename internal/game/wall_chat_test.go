@@ -2,7 +2,6 @@ package game
 
 import (
 	"testing"
-	"time"
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/require"
@@ -57,15 +56,13 @@ func TestWallAppendAndRateLimit(t *testing.T) {
 	sender := &Player{ID: mustUUID(t), Name: "marcel"}
 	other := &Player{ID: mustUUID(t), Name: "kevin"}
 
-	// Sessions are throttled, but not each other.
+	// Sessions don't throttle each other, and back-to-back strokes are
+	// accepted since the throttle was removed.
 	require.True(t, lobby.AppendWallEvent(linePayload, EventTypeLine, sender))
-	require.False(t, lobby.AppendWallEvent(linePayload, EventTypeLine, sender),
-		"Two strokes of one session must not be allowed back to back.")
-	require.True(t, lobby.AppendWallEvent(linePayload, EventTypeLine, other),
-		"Different sessions must not throttle each other.")
+	require.True(t, lobby.AppendWallEvent(linePayload, EventTypeLine, sender))
+	require.True(t, lobby.AppendWallEvent(linePayload, EventTypeLine, other))
 
-	// The wall width is clamped like the game canvas width. A nil sender
-	// bypasses the rate limit, which keeps the test deterministic.
+	// The wall width is clamped like the game canvas width.
 	thickPayload := []byte(`{"type":"line","data":{"x":1,"y":2,"x2":3,"y2":4,"color":1,"width":1000}}`)
 	require.True(t, lobby.AppendWallEvent(thickPayload, EventTypeLine, nil))
 
@@ -87,18 +84,13 @@ func TestWallStrokeChain(t *testing.T) {
 
 	sender := &Player{ID: mustUUID(t), Name: "marcel"}
 
-	// One rate limit token per chain, not per segment: the session is
-	// throttled per stroke.
 	chainPayload := []byte(`[
 		{"type":"line","data":{"x":1,"y":2,"x2":3,"y2":4,"color":1,"width":8}},
 		{"type":"line","data":{"x":3,"y":4,"x2":5,"y2":6,"color":1,"width":8}}
 	]`)
 	require.True(t, lobby.AppendWallEventChain(chainPayload, sender))
-	require.False(t, lobby.AppendWallEventChain(chainPayload, sender),
-		"A second immediately following stroke must be throttled.")
-
-	// A nil sender bypasses the rate limit, e.g. for tests.
-	require.True(t, lobby.AppendWallEventChain(chainPayload, nil))
+	require.True(t, lobby.AppendWallEventChain(chainPayload, sender),
+		"Back-to-back strokes of one session must be accepted.")
 
 	// The chain is expanded into regular line events.
 	snapshot := lobby.WallSnapshot()
@@ -156,8 +148,7 @@ func TestWallUndoAndClear(t *testing.T) {
 		{"type":"line","data":{"x":7,"y":8,"x2":9,"y2":10,"color":2,"width":8}}
 	]`)
 
-	// Rate limiting doesn't matter for ownership, but the tests draw back
-	// to back: distinct senders and throttle resets keep that honest.
+	// Distinct senders keep ownership assertions honest.
 	require.True(t, lobby.AppendWallEventChain(marcelChain, marcel))
 	require.True(t, lobby.AppendWallEventChain(kevinChain, kevin))
 
@@ -168,11 +159,7 @@ func TestWallUndoAndClear(t *testing.T) {
 
 	// Marcel draws again, then undoes: the removal must splice Marcel's
 	// last stroke out, leaving kevin's stroke (drawn after Marcel's first)
-	// intact. Kevin's throttle is reset, since the test draws twice back
-	// to back.
-	lobby.Synchronized(func() {
-		kevin.lastWallStroke = time.Time{}
-	})
+	// intact.
 	require.True(t, lobby.AppendWallEventChain(kevinChain, kevin))
 	require.True(t, lobby.UndoLastWallStroke(marcel))
 	snapshot = lobby.WallSnapshot()

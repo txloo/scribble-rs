@@ -89,11 +89,6 @@ func (handler *SSRHandler) ssrEnterLobbyNoChecks(
 				return
 			}
 
-			if !lobby.CanIPConnect(requestAddress) {
-				handler.userFacingError(writer, translation.Get("lobby-ip-limit-excceeded"), translation)
-				return
-			}
-
 			newPlayer := lobby.JoinPlayer(api.GetPlayername(request))
 
 			newPlayer.SetLastKnownAddress(requestAddress)

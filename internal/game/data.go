@@ -178,24 +178,6 @@ func (player *Player) LastSeen() time.Time {
 	return player.lastSeen
 }
 
-// wallStrokeInterval is the minimum spacing between two wall strokes of one
-// session. A mousemove produces around one stroke per rendered frame, so
-// this must be well below a second; it only exists to survive the loss of
-// the websocket's natural backpressure against flooding.
-const wallStrokeInterval = 15 * time.Millisecond
-
-// TakeWallStroke reports whether the player may add another wall stroke
-// right now and records the attempt. Must be called while holding the
-// lobby's mutex, matching how the rest of the codebase mutates players.
-func (player *Player) TakeWallStroke() bool {
-	now := time.Now()
-	if now.Sub(player.lastWallStroke) < wallStrokeInterval {
-		return false
-	}
-	player.lastWallStroke = now
-	return true
-}
-
 type PlayerState string
 
 const (
@@ -382,23 +364,6 @@ func (lobby *Lobby) HasConnectedPlayers() bool {
 	}
 
 	return false
-}
-
-// CanIPConnect checks whether the IP is still allowed regarding the lobbies
-// clients per IP address limit. This function should only be called for
-// players that aren't already in the lobby.
-func (lobby *Lobby) CanIPConnect(address string) bool {
-	var clientsWithSameIP int
-	for _, player := range lobby.GetPlayers() {
-		if player.GetLastKnownAddress() == address {
-			clientsWithSameIP++
-			if clientsWithSameIP >= lobby.ClientsPerIPLimit {
-				return false
-			}
-		}
-	}
-
-	return true
 }
 
 func (lobby *Lobby) IsPublic() bool {

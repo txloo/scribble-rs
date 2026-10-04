@@ -74,8 +74,7 @@ func TestWallPersistAndLoad(t *testing.T) {
 	// Simulate a wall change through the regular draw-event path.
 	lineJSON, err := json.Marshal(lineEvent)
 	require.NoError(t, err)
-	require.True(t, lobby.AppendWallEvent(lineJSON, game.EventTypeLine, nil),
-		"A nil sender must bypass the rate limit.")
+	require.True(t, lobby.AppendWallEvent(lineJSON, game.EventTypeLine, nil))
 	require.True(t, lobby.WallDirty(), "The wall should be dirty after a change.")
 
 	require.NoError(t, SaveWallNow(wallFile, lobby))

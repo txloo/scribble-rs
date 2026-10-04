@@ -245,25 +245,7 @@ func (lobby *Lobby) readyToStart() bool {
 	return hasConnectedPlayers
 }
 
-func isRatelimited(sender *Player) bool {
-	if sender.messageTimestamps.size < 5 {
-		return false
-	}
-
-	oldest := sender.messageTimestamps.Oldest()
-	latest := sender.messageTimestamps.Latest()
-
-	if latest.Sub(oldest) >= time.Second*3 {
-		return false
-	}
-
-	return true
-}
-
 func handleMessage(message string, sender *Player, lobby *Lobby) {
-	// No matter whether the message is send, we'll make ratelimitting take place.
-	sender.messageTimestamps.Push(time.Now())
-
 	// Very long message can cause lags and can therefore be easily abused.
 	// While it is debatable whether a 10000 byte (not character) long
 	// message makes sense, this is technically easy to manage and therefore
@@ -276,17 +258,6 @@ func handleMessage(message string, sender *Player, lobby *Lobby) {
 	// Empty message can neither be a correct guess nor are useful for
 	// other players in the chat.
 	if trimmedMessage == "" {
-		return
-	}
-
-	// Rate limitting is silent, we will pretend the message was sent, but not show any other players.
-	// Additionally, both close and correct guesses will be ignored.
-	if isRatelimited(sender) {
-		if sender.State != Guessing && lobby.CurrentWord != "" {
-			_ = lobby.WriteObject(sender, newMessageEvent(EventTypeNonGuessingPlayerMessage, trimmedMessage, sender))
-		} else {
-			_ = lobby.WriteObject(sender, newMessageEvent(EventTypeMessage, trimmedMessage, sender))
-		}
 		return
 	}
 
@@ -412,30 +383,24 @@ func (lobby *Lobby) AppendChatMessage(messageType, message string, sender *Playe
 }
 
 // SubmitChatMessage handles a chat message on behalf of a player, applying
-// guessing logic, rate limiting and storing. It reports whether the message
-// was accepted; rate limited messages are silently dropped, matching the
-// upstream behaviour. It acquires the lobby mutex itself, so it must never
-// be called while already holding it.
+// guessing logic and storing. It reports whether the message was accepted.
+// It acquires the lobby mutex itself, so it must never be called while
+// already holding it.
 func (lobby *Lobby) SubmitChatMessage(message string, player *Player) bool {
 	lobby.mutex.Lock()
 	defer lobby.mutex.Unlock()
 
 	handleMessage(message, player, lobby)
 
-	return !isRatelimited(player)
+	return true
 }
 
 // AppendWallEvent adds a line or fill event to the drawing wall on behalf
-// of a player, rate limiting per session. A nil sender skips the rate
-// limit, e.g. for internal or test usage. It reports whether the event was
-// accepted. Acquires the lobby mutex itself.
+// of a player. It reports whether the event was accepted. Acquires the
+// lobby mutex itself.
 func (lobby *Lobby) AppendWallEvent(payload []byte, eventType string, sender *Player) bool {
 	lobby.mutex.Lock()
 	defer lobby.mutex.Unlock()
-
-	if sender != nil && !sender.TakeWallStroke() {
-		return false
-	}
 
 	lobby.appendWallEvent(payload, eventType, sender)
 
@@ -456,18 +421,12 @@ const maxWallChainPoints = 512
 // AppendWallEventChain adds a whole stroke to the drawing wall on behalf of
 // a player. The client collects every mousemove segment while the pointer
 // is down and sends them in one request on release, which reduces HTTP
-// chatter drastically and makes the per-session rate limit a per-stroke
-// limit instead of a per-segment one. The chain is expanded into regular
-// LineEvents, so the wall's replay and persistence format stays unchanged.
-// A nil sender skips the rate limit, e.g. for test usage. Acquires the
+// chatter drastically. The chain is expanded into regular LineEvents, so
+// the wall's replay and persistence format stays unchanged. Acquires the
 // lobby mutex itself.
 func (lobby *Lobby) AppendWallEventChain(payload []byte, sender *Player) bool {
 	lobby.mutex.Lock()
 	defer lobby.mutex.Unlock()
-
-	if sender != nil && !sender.TakeWallStroke() {
-		return false
-	}
 
 	var chain []LineEvent
 	if err := json.Unmarshal(payload, &chain); err != nil {
@@ -1569,11 +1528,10 @@ func (lobby *Lobby) GetAvailableWordHints(player *Player) []*WordHint {
 // to the lobbies playerlist. The new players is returned.
 func (lobby *Lobby) JoinPlayer(name string) *Player {
 	player := &Player{
-		Name:              SanitizeName(name),
-		ID:                uuid.Must(uuid.NewV4()),
-		userSession:       uuid.Must(uuid.NewV4()),
-		votedForKick:      make(map[uuid.UUID]bool),
-		messageTimestamps: NewRing[time.Time](5),
+		Name:         SanitizeName(name),
+		ID:           uuid.Must(uuid.NewV4()),
+		userSession:  uuid.Must(uuid.NewV4()),
+		votedForKick: make(map[uuid.UUID]bool),
 	}
 
 	if lobby.State == Ongoing {

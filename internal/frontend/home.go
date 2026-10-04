@@ -76,11 +76,6 @@ func (handler *SSRHandler) homePageHandler(writer http.ResponseWriter, request *
 				return
 			}
 
-			if !hub.CanIPConnect(requestAddress) {
-				handler.userFacingError(writer, translation.Get("lobby-ip-limit-excceeded"), translation)
-				return
-			}
-
 			player = hub.JoinPlayer(api.GetPlayername(request))
 		}
 

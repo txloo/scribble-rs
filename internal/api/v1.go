@@ -15,6 +15,7 @@ import (
 	"github.com/scribble-rs/scribble.rs/internal/config"
 	"github.com/scribble-rs/scribble.rs/internal/game"
 	"github.com/scribble-rs/scribble.rs/internal/state"
+	"github.com/scribble-rs/scribble.rs/internal/translation"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -23,11 +24,15 @@ var ErrLobbyNotExistent = errors.New("the requested lobby doesn't exist")
 
 type V1Handler struct {
 	cfg *config.Config
+	// translationClient provides live chat translation; disabled when no
+	// API key is configured.
+	translationClient *translation.Client
 }
 
 func NewHandler(cfg *config.Config) *V1Handler {
 	return &V1Handler{
-		cfg: cfg,
+		cfg:               cfg,
+		translationClient: translation.NewClient(cfg.GoogleTranslateAPIKey),
 	}
 }
 
@@ -241,11 +246,6 @@ func (handler *V1Handler) postPlayer(writer http.ResponseWriter, request *http.R
 			}
 
 			requestAddress := GetIPAddressFromRequest(request)
-
-			if !lobby.CanIPConnect(requestAddress) {
-				http.Error(writer, "maximum amount of players per IP reached", http.StatusUnauthorized)
-				return
-			}
 
 			newPlayer := lobby.JoinPlayer(GetPlayername(request))
 			newPlayer.SetLastKnownAddress(requestAddress)

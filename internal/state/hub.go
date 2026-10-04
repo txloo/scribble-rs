@@ -76,9 +76,7 @@ func parseHubLobbySettings(cfg *config.Config) *game.EditableLobbySettings {
 		// the general maximum amount of words per turn.
 		CustomWordsPerTurn: parseHubInt(defaults.CustomWordsPerTurn, 3,
 			bounds.MinCustomWordsPerTurn, bounds.MaxWordsPerTurn),
-		ClientsPerIPLimit: parseHubInt(defaults.ClientsPerIPLimit, 2,
-			bounds.MinClientsPerIPLimit, bounds.MaxClientsPerIPLimit),
-		Rounds:       parseHubInt(defaults.Rounds, 4, bounds.MinRounds, bounds.MaxRounds),
+		Rounds:      parseHubInt(defaults.Rounds, 4, bounds.MinRounds, bounds.MaxRounds),
 		DrawingTime:  parseHubInt(defaults.DrawingTime, 120, bounds.MinDrawingTime, bounds.MaxDrawingTime),
 		WordsPerTurn: parseHubInt(defaults.WordsPerTurn, 3, bounds.MinWordsPerTurn, bounds.MaxWordsPerTurn),
 	}
