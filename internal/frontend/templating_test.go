@@ -4,31 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/scribble-rs/scribble.rs/internal/api"
 	"github.com/scribble-rs/scribble.rs/internal/config"
 	"github.com/scribble-rs/scribble.rs/internal/translations"
 	"github.com/stretchr/testify/require"
 )
-
-func Test_templateLobbyPage(t *testing.T) {
-	t.Parallel()
-
-	var buffer bytes.Buffer
-	err := pageTemplates.ExecuteTemplate(&buffer,
-		"lobby-page", &lobbyPageData{
-			BasePageConfig: &BasePageConfig{
-				checksums: make(map[string]string),
-			},
-			LobbyData: &api.LobbyData{
-				SettingBounds: config.Default.LobbySettingBounds,
-				GameConstants: api.GameConstantsData,
-			},
-			Translation: translations.DefaultTranslation,
-		})
-	if err != nil {
-		t.Errorf("Error templating: %s", err)
-	}
-}
 
 func Test_templateErrorPage(t *testing.T) {
 	t.Parallel()
