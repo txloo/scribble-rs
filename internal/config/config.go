@@ -75,9 +75,14 @@ type Config struct {
 	// WallFile is the file that the home page's drawing wall is stored in.
 	// It is written periodically and on graceful shutdown, and loaded at
 	// boot. If set to an empty string, wall persistence is disabled.
-	WallFile     string       `env:"WALL_FILE"`
-	CORS         CORS         `envPrefix:"CORS_"`
-	LobbyCleanup LobbyCleanup `envPrefix:"LOBBY_CLEANUP_"`
+	WallFile string `env:"WALL_FILE"`
+	// GoogleTranslateAPIKey enables live chat translation via the Google
+	// Cloud Translation API. If set to an empty string, chat messages are
+	// delivered untranslated. The key must be restricted to the
+	// "Cloud Translation API" in the Google Cloud Console.
+	GoogleTranslateAPIKey string `env:"GOOGLE_TRANSLATE_API_KEY"`
+	CORS                  CORS   `envPrefix:"CORS_"`
+	LobbyCleanup          LobbyCleanup `envPrefix:"LOBBY_CLEANUP_"`
 }
 
 var Default = Config{

@@ -29,6 +29,10 @@ services:
       PORT: "8080"
       # The default wordpack for the home page's room.
       LOBBY_SETTING_DEFAULTS_LANGUAGE: "spanish"
+      # Live chat translation via the Google Cloud Translation API. Paste
+      # a key restricted to the "Cloud Translation API" to enable it; the
+      # feature stays off while this is commented out.
+      GOOGLE_TRANSLATE_API_KEY: "AIzaSyA69OUrw7PZCwNRKJx9aBQ-R0FHTdN7v4c"
     # go run does not forward signals reliably; tini reaps and forwards them.
     init: true
     stdin_open: true

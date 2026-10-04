@@ -213,3 +213,13 @@ html {
     max-height: none;
 }
 
+/* Live chat translation: the original message is the main text; the
+   translation into the viewer's interface language shows as a small line
+   under it. */
+.message-translation {
+    display: block;
+    font-size: 0.8rem;
+    color: rgb(120, 120, 120);
+    margin-left: 0.3em;
+}
+

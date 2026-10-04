@@ -605,7 +605,7 @@ function drawLineAndSendEvent(
 const messageInput = document.getElementById("message-input");
 const messageContainer = document.getElementById("message-container");
 
-function appendMessage(styleClass, author, message) {
+function appendMessage(styleClass, author, message, translatedContent) {
     if (messageContainer.childElementCount >= 100) {
         messageContainer.removeChild(messageContainer.firstChild);
     }
@@ -627,6 +627,15 @@ function appendMessage(styleClass, author, message) {
     messageSpan.classList.add("message-content");
     messageSpan.innerText = message;
     newMessageDiv.appendChild(messageSpan);
+
+    // Live translation: the original stays the main text; the translation
+    // into the viewer's interface language shows as a small line under it.
+    if (translatedContent !== undefined && translatedContent !== null && translatedContent !== "") {
+        const translationSpan = document.createElement("span");
+        translationSpan.classList.add("message-translation");
+        translationSpan.innerText = translatedContent;
+        newMessageDiv.appendChild(translationSpan);
+    }
 
     messageContainer.appendChild(newMessageDiv);
 
@@ -722,7 +731,8 @@ async function pollHub() {
         const chatData = await chatResponse.json();
 
         for (const message of chatData.messages) {
-            appendMessage("system-message", message.author, message.content);
+            appendMessage("system-message", message.author, message.content,
+                message.translatedContent);
         }
         hubChatCursor = chatData.latestId;
 
