@@ -123,13 +123,15 @@ func (handler *SSRHandler) SetupRoutes(register func(string, string, http.Handle
 		)
 	}
 
-	indexHandler := handler.cspMiddleware(handler.indexPageHandler)
+	homeHandler := handler.cspMiddleware(handler.homePageHandler)
 	register("GET", handler.cfg.RootPath,
 		http.StripPrefix(
 			"/"+handler.cfg.RootPath,
 			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "" || r.URL.Path == "/" {
-					indexHandler(w, r)
+					// The home page is the whole app for personal use: a
+					// permanent drawing wall and a chat, no lobby UI.
+					homeHandler(w, r)
 					return
 				}
 
@@ -152,6 +154,7 @@ func (handler *SSRHandler) SetupRoutes(register func(string, string, http.Handle
 		).ServeHTTP,
 	)
 	registerWithCsp("GET", path.Join(handler.cfg.RootPath, "lobby.js"), handler.lobbyJs)
+	registerWithCsp("GET", path.Join(handler.cfg.RootPath, "home.js"), handler.homeJs)
 	registerWithCsp("GET", path.Join(handler.cfg.RootPath, "index.js"), handler.indexJs)
 	registerWithCsp("GET", path.Join(handler.cfg.RootPath, "lobby", "{lobby_id}"), handler.ssrEnterLobby)
 	registerWithCsp("POST", path.Join(handler.cfg.RootPath, "lobby"), handler.ssrCreateLobby)

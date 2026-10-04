@@ -293,7 +293,7 @@ func handleMessage(message string, sender *Player, lobby *Lobby) {
 	// If no word is currently selected, all players can talk to each other
 	// and we don't have to check for corrected guesses.
 	if lobby.CurrentWord == "" {
-		lobby.broadcastMessage(trimmedMessage, sender)
+		lobby.AppendChatMessage(EventTypeMessage, trimmedMessage, sender)
 		return
 	}
 
@@ -333,11 +333,11 @@ func handleMessage(message string, sender *Player, lobby *Lobby) {
 			// In cases of a close guess, we still send the message to everyone.
 			// This allows other players to guess the word by watching what the
 			// other players are misstyping.
-			lobby.broadcastMessage(trimmedMessage, sender)
+			lobby.AppendChatMessage(EventTypeMessage, trimmedMessage, sender)
 			_ = lobby.WriteObject(sender, Event{Type: EventTypeCloseGuess, Data: trimmedMessage})
 		}
 	default:
-		lobby.broadcastMessage(trimmedMessage, sender)
+		lobby.AppendChatMessage(EventTypeMessage, trimmedMessage, sender)
 	}
 }
 
@@ -381,11 +381,268 @@ func newMessageEvent(messageType, message string, sender *Player) *Event {
 	}}
 }
 
-func (lobby *Lobby) broadcastMessage(message string, sender *Player) {
-	lobby.Broadcast(newMessageEvent(EventTypeMessage, message, sender))
+// AppendChatMessage passes a chat message to a player and stores it in the
+// lobby's chat log for later polling over HTTP. It returns the message's
+// monotonic ID, which clients use as the cursor for chat polling. Must be
+// called while holding the lobby mutex; SubmitChatMessage is the
+// self-locking entrypoint for callers outside the package.
+func (lobby *Lobby) AppendChatMessage(messageType, message string, sender *Player) uint64 {
+	lobby.chatCounter++
+	// Built directly instead of via newMessageEvent, since upstream stores
+	// the message by value in Event.Data, which cannot be asserted out.
+	storedMessage := StoreMessage{
+		OutgoingMessage: OutgoingMessage{
+			Author:   sender.Name,
+			AuthorID: sender.ID,
+			Content:  discordemojimap.Replace(message),
+		},
+		ID: lobby.chatCounter,
+	}
+
+	// The log is bounded so that lobbies that never end don't leak memory.
+	// The size is generous enough for a chatroom to feel complete for
+	// someone that polls every few seconds.
+	lobby.chatLog = append(lobby.chatLog, storedMessage)
+	if overflow := len(lobby.chatLog) - chatLogCapacity; overflow > 0 {
+		lobby.chatLog = lobby.chatLog[overflow:]
+	}
+
+	lobby.Broadcast(newMessageEvent(messageType, message, sender))
+	return storedMessage.ID
+}
+
+// SubmitChatMessage handles a chat message on behalf of a player, applying
+// guessing logic, rate limiting and storing. It reports whether the message
+// was accepted; rate limited messages are silently dropped, matching the
+// upstream behaviour. It acquires the lobby mutex itself, so it must never
+// be called while already holding it.
+func (lobby *Lobby) SubmitChatMessage(message string, player *Player) bool {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	handleMessage(message, player, lobby)
+
+	return !isRatelimited(player)
+}
+
+// AppendWallEvent adds a line or fill event to the drawing wall on behalf
+// of a player, rate limiting per session. A nil sender skips the rate
+// limit, e.g. for internal or test usage. It reports whether the event was
+// accepted. Acquires the lobby mutex itself.
+func (lobby *Lobby) AppendWallEvent(payload []byte, eventType string, sender *Player) bool {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	if sender != nil && !sender.TakeWallStroke() {
+		return false
+	}
+
+	lobby.appendWallEvent(payload, eventType, sender)
+
+	var ownerID uuid.UUID
+	if sender != nil {
+		ownerID = sender.ID
+	}
+	lobby.wallStrokes = append(lobby.wallStrokes, wallStrokeRecord{ownerID: ownerID, count: 1})
+
+	return true
+}
+
+// maxWallChainPoints caps how many segments one stroke may contain. A
+// mousemove produces around one segment per rendered frame, so even long
+// strokes stay well below this; the cap only exists to bound request sizes.
+const maxWallChainPoints = 512
+
+// AppendWallEventChain adds a whole stroke to the drawing wall on behalf of
+// a player. The client collects every mousemove segment while the pointer
+// is down and sends them in one request on release, which reduces HTTP
+// chatter drastically and makes the per-session rate limit a per-stroke
+// limit instead of a per-segment one. The chain is expanded into regular
+// LineEvents, so the wall's replay and persistence format stays unchanged.
+// A nil sender skips the rate limit, e.g. for test usage. Acquires the
+// lobby mutex itself.
+func (lobby *Lobby) AppendWallEventChain(payload []byte, sender *Player) bool {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	if sender != nil && !sender.TakeWallStroke() {
+		return false
+	}
+
+	var chain []LineEvent
+	if err := json.Unmarshal(payload, &chain); err != nil {
+		log.Printf("error decoding wall stroke chain: %s\n", err)
+		return true
+	}
+
+	if len(chain) > maxWallChainPoints {
+		chain = chain[:maxWallChainPoints]
+	}
+
+	for segmentIndex := range chain {
+		segment := &chain[segmentIndex]
+		if segment.Data.Width > MaxBrushSize {
+			segment.Data.Width = MaxBrushSize
+		} else if segment.Data.Width < MinBrushSize {
+			segment.Data.Width = MinBrushSize
+		}
+
+		lobby.wallDrawing = append(lobby.wallDrawing, segment)
+	}
+
+	if len(chain) != 0 {
+		var ownerID uuid.UUID
+		if sender != nil {
+			ownerID = sender.ID
+		}
+		lobby.wallStrokes = append(lobby.wallStrokes,
+			wallStrokeRecord{ownerID: ownerID, count: len(chain)})
+
+		lobby.wallDirty = true
+		lobby.wallUpdateCounter++
+	}
+
+	return true
+}
+
+// UndoLastWallStroke removes the calling player's most recent stroke from
+// the wall, even if other players drew after them. A stroke is the whole
+// batched pointer-down-to-release chain, or a single fill. It reports
+// whether anything was removed. Acquires the lobby mutex itself.
+func (lobby *Lobby) UndoLastWallStroke(player *Player) bool {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	strokeIndex := -1
+	for index := len(lobby.wallStrokes) - 1; index >= 0; index-- {
+		if lobby.wallStrokes[index].ownerID == player.ID {
+			strokeIndex = index
+			break
+		}
+	}
+	if strokeIndex == -1 {
+		return false
+	}
+
+	// Determine where the stroke's entries start in wallDrawing.
+	startIndex := 0
+	for index := 0; index < strokeIndex; index++ {
+		startIndex += lobby.wallStrokes[index].count
+	}
+
+	record := lobby.wallStrokes[strokeIndex]
+	lobby.wallDrawing = append(lobby.wallDrawing[:startIndex],
+		lobby.wallDrawing[startIndex+record.count:]...)
+	lobby.wallStrokes = append(lobby.wallStrokes[:strokeIndex],
+		lobby.wallStrokes[strokeIndex+1:]...)
+
+	lobby.wallDirty = true
+	lobby.wallUpdateCounter++
+
+	return true
+}
+
+// ClearWall removes everything from the drawing wall, including the undo
+// history. It reports whether the wall actually changed. Acquires the
+// lobby mutex itself.
+func (lobby *Lobby) ClearWall() bool {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	if len(lobby.wallDrawing) == 0 {
+		return false
+	}
+
+	lobby.wallDrawing = nil
+	lobby.wallStrokes = nil
+	lobby.wallDirty = true
+	lobby.wallUpdateCounter++
+
+	return true
+}
+
+// appendWallEvent adds a line or fill event to the persistent drawing wall
+// and forwards it to everyone else. In contrast to the game drawing there's
+// no drawer check, since everyone may draw on the wall. The wall is never
+// cleared and never undone, preserving everything that was drawn on it,
+// which is also why it is persisted to disk. Must be called while holding
+// the lobby mutex.
+func (lobby *Lobby) appendWallEvent(payload []byte, eventType string, sender *Player) {
+	var event any
+	if eventType == EventTypeLine {
+		event = &LineEvent{}
+	} else {
+		event = &FillEvent{}
+	}
+
+	if err := json.Unmarshal(payload, event); err != nil {
+		log.Printf("error decoding wall event: %s\n", err)
+		return
+	}
+
+	// The same width limits as for the game canvas apply, to prevent
+	// clients from lagging due to absurdly thick lines.
+	if line, isLine := event.(*LineEvent); isLine {
+		if line.Data.Width > MaxBrushSize {
+			line.Data.Width = MaxBrushSize
+		} else if line.Data.Width < MinBrushSize {
+			line.Data.Width = MinBrushSize
+		}
+	}
+
+	lobby.wallDrawing = append(lobby.wallDrawing, event)
+	lobby.wallDirty = true
+	lobby.wallUpdateCounter++
+
+	// We directly forward the event, as it seems to be valid.
+	lobby.broadcastConditional(event, ExcludePlayer(sender))
+}
+
+// PruneIdlePlayers removes socketless players that haven't interacted with
+// the lobby for longer than the given duration, e.g. visitors that closed
+// their tab without any socket-based cleanup noticing. It reports how many
+// players were removed. Acquires the lobby mutex itself.
+func (lobby *Lobby) PruneIdlePlayers(maxIdle time.Duration) int {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	if !lobby.IsHub {
+		// Regular lobbies manage presence via websocket disconnects.
+		return 0
+	}
+
+	cutoff := time.Now().Add(-maxIdle)
+	removed := 0
+	for index := len(lobby.players) - 1; index >= 0; index-- {
+		player := lobby.players[index]
+		if player.Connected || player.LastSeen().After(cutoff) {
+			continue
+		}
+
+		lobby.players = append(lobby.players[:index], lobby.players[index+1:]...)
+		removed++
+	}
+
+	// If the owner was pruned, hand the room to the next best person.
+	if len(lobby.players) != 0 && lobby.GetPlayerByID(lobby.OwnerID) == nil {
+		lobby.OwnerID = lobby.players[0].ID
+	}
+
+	if removed != 0 {
+		recalculateRanks(lobby)
+		lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+	}
+
+	return removed
 }
 
 func (lobby *Lobby) Broadcast(data any) {
+	// Socketless lobbies (e.g. the home page's room) have no socket push
+	// wiring; there is nothing to broadcast to.
+	if lobby.WritePreparedMessage == nil {
+		return
+	}
+
 	bytes, err := json.Marshal(data)
 	if err != nil {
 		log.Println("error marshalling Broadcast message", err)
@@ -399,6 +656,12 @@ func (lobby *Lobby) Broadcast(data any) {
 }
 
 func (lobby *Lobby) broadcastConditional(data any, condition func(*Player) bool) {
+	// Socketless lobbies (e.g. the home page's room) have no socket push
+	// wiring; there is nothing to broadcast to.
+	if lobby.WritePreparedMessage == nil {
+		return
+	}
+
 	var message *gws.Broadcaster
 	for _, player := range lobby.players {
 		if condition(player) {
@@ -1181,6 +1444,12 @@ func CreateLobby(
 // trusted to be sane.
 func generatePlayerName() string {
 	return petname.Generate(3, petname.Title, petname.None)
+}
+
+// GeneratePlayername is the exported entrypoint for generating a random
+// playername, e.g. for the home page, which has no requesting player.
+func GeneratePlayername() string {
+	return generatePlayerName()
 }
 
 func generateReadyData(lobby *Lobby, player *Player) *ReadyEvent {

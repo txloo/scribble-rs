@@ -61,6 +61,14 @@ func main() {
 
 	api.NewHandler(cfg).SetupRoutes(cfg.RootPath, register)
 
+	// The home page's permanent room: everyone opening the site lands in
+	// it, with a persistent drawing wall and shared chat, all over HTTP.
+	hubLobby := state.EnsureHubLobby(cfg)
+
+	// Persist the drawing wall across restarts.
+	wallFile := cfg.WallFile
+	state.LaunchWallStore(wallFile, hubLobby)
+
 	frontendHandler, err := frontend.NewHandler(cfg)
 	if err != nil {
 		log.Fatal("error setting up frontend:", err)
@@ -78,8 +86,11 @@ func main() {
 
 		log.Printf("Received %s, gracefully shutting down.\n", <-signalChan)
 
-		state.ShutdownLobbiesGracefully()
-		if cfg.CPUProfilePath != "" {
+	state.ShutdownLobbiesGracefully()
+	if err := state.SaveWallNow(wallFile, hubLobby); err != nil {
+		log.Printf("error saving the wall during shutdown: %s\n", err)
+	}
+	if cfg.CPUProfilePath != "" {
 			pprof.StopCPUProfile()
 			log.Println("Finished CPU profiling.")
 		}

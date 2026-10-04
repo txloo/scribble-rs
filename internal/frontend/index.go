@@ -28,6 +28,9 @@ var lobbyJsRaw string
 //go:embed index.js
 var indexJsRaw string
 
+//go:embed home.js
+var homeJsRaw string
+
 type indexJsData struct {
 	*BasePageConfig
 
@@ -42,6 +45,7 @@ type SSRHandler struct {
 	basePageConfig     *BasePageConfig
 	lobbyJsRawTemplate *txtTemplate.Template
 	indexJsRawTemplate *txtTemplate.Template
+	homeJsRawTemplate  *txtTemplate.Template
 }
 
 func NewHandler(cfg *config.Config) (*SSRHandler, error) {
@@ -77,6 +81,15 @@ func NewHandler(cfg *config.Config) (*SSRHandler, error) {
 
 	lobbyJsRawTemplate.AddParseTree("footer", pageTemplates.Tree)
 
+	homeJsRawTemplate, err := txtTemplate.
+		New("home-js").
+		Parse(homeJsRaw)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing home js template: %w", err)
+	}
+
+	homeJsRawTemplate.AddParseTree("footer", pageTemplates.Tree)
+
 	entries, err := frontendResourcesFS.ReadDir("resources")
 	if err != nil {
 		return nil, fmt.Errorf("error reading resource directory: %w", err)
@@ -99,12 +112,16 @@ func NewHandler(cfg *config.Config) (*SSRHandler, error) {
 	if err := basePageConfig.Hash("lobby.js", []byte(lobbyJsRaw)); err != nil {
 		return nil, fmt.Errorf("error hashing: %w", err)
 	}
+	if err := basePageConfig.Hash("home.js", []byte(homeJsRaw)); err != nil {
+		return nil, fmt.Errorf("error hashing: %w", err)
+	}
 
 	handler := &SSRHandler{
 		cfg:                cfg,
 		basePageConfig:     basePageConfig,
 		lobbyJsRawTemplate: lobbyJsRawTemplate,
 		indexJsRawTemplate: indexJsRawTemplate,
+		homeJsRawTemplate:  homeJsRawTemplate,
 	}
 	return handler, nil
 }

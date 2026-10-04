@@ -44,7 +44,8 @@ func cleanupRoutineLogic(cfg *config.LobbyCleanup) {
 	initalLobbyCount := len(lobbies)
 	for index := len(lobbies) - 1; index >= 0; index-- {
 		lobby := lobbies[index]
-		if lobby.HasConnectedPlayers() {
+		// The home page's room is permanent and never removed.
+		if lobby.IsHub || lobby.HasConnectedPlayers() {
 			continue
 		}
 

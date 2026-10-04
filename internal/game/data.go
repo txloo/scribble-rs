@@ -94,6 +94,32 @@ type Lobby struct {
 	lastDrawEvent                 time.Time
 	connectedDrawEventsIndexStack []int
 
+	// IsHub marks the one persistent room behind the home page. It must
+	// never be removed by the cleanup routine and has no lobby UI.
+	IsHub bool
+
+	// wallDrawing is the persistent drawing wall of the home page. In
+	// contrast to currentDrawing it is never cleared and can be drawn on
+	// by everyone. Elements are LineEvent and FillEvent, just like
+	// currentDrawing.
+	wallDrawing []any
+	wallDirty   bool
+
+	// wallStrokes records, in order, how many consecutive wall entries
+	// belong to which player, so that a player can undo their own last
+	// stroke even when others drew after them. Records loaded from disk
+	// don't exist, making booted wall content not undoable.
+	wallStrokes []wallStrokeRecord
+
+	// wallUpdateCounter is bumped whenever the wall changes. Clients use it
+	// to detect wall changes when polling over HTTP.
+	wallUpdateCounter uint64
+
+	// chatLog stores the most recent chat messages with monotonic IDs, so
+	// that clients can poll them over HTTP without maintaining a socket.
+	chatCounter uint64
+	chatLog     []StoreMessage
+
 	lowercaser cases.Caser
 
 	// LastPlayerDisconnectTime is used to know since when a lobby is empty, in case
@@ -138,6 +164,36 @@ func (player *Player) SetWebsocket(socket *gws.Conn) {
 // GetUserSession returns the players current user session.
 func (player *Player) GetUserSession() uuid.UUID {
 	return player.userSession
+}
+
+// TouchLastSeen records that the player recently interacted with the lobby
+// over HTTP (chat or wall polling), which is how socketless clients prove
+// their presence.
+func (player *Player) TouchLastSeen() {
+	player.lastSeen = time.Now()
+}
+
+// LastSeen reports when the player last interacted with the lobby.
+func (player *Player) LastSeen() time.Time {
+	return player.lastSeen
+}
+
+// wallStrokeInterval is the minimum spacing between two wall strokes of one
+// session. A mousemove produces around one stroke per rendered frame, so
+// this must be well below a second; it only exists to survive the loss of
+// the websocket's natural backpressure against flooding.
+const wallStrokeInterval = 15 * time.Millisecond
+
+// TakeWallStroke reports whether the player may add another wall stroke
+// right now and records the attempt. Must be called while holding the
+// lobby's mutex, matching how the rest of the codebase mutates players.
+func (player *Player) TakeWallStroke() bool {
+	now := time.Now()
+	if now.Sub(player.lastWallStroke) < wallStrokeInterval {
+		return false
+	}
+	player.lastWallStroke = now
+	return true
 }
 
 type PlayerState string
@@ -191,6 +247,96 @@ func (lobby *Lobby) AppendLine(line *LineEvent) {
 // an empty interface type.
 func (lobby *Lobby) AppendFill(fill *FillEvent) {
 	lobby.currentDrawing = append(lobby.currentDrawing, fill)
+}
+
+// WallSnapshot returns a copy of the wall's drawing events, e.g. for
+// persisting them to disk or sending them to newly connected players.
+func (lobby *Lobby) WallSnapshot() []any {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	snapshot := make([]any, len(lobby.wallDrawing))
+	copy(snapshot, lobby.wallDrawing)
+	return snapshot
+}
+
+// WallDirty reports whether the wall contains changes that haven't been
+// saved to disk yet.
+func (lobby *Lobby) WallDirty() bool {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	return lobby.wallDirty
+}
+
+// MarkWallSaved resets the wall's dirty flag. Called by the wall store after
+// a successful save.
+func (lobby *Lobby) MarkWallSaved() {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	lobby.wallDirty = false
+}
+
+// LoadWall replaces the wall's drawing events, e.g. with data loaded from
+// disk at boot time.
+func (lobby *Lobby) LoadWall(events []any) {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	lobby.wallDrawing = events
+	// Loaded wall content has no stroke records, so it can't be undone.
+	lobby.wallStrokes = nil
+	lobby.wallDirty = false
+	// The counter only needs to differ from the previous value; a fresh
+	// boot starting at 1 is fine, as clients compare within one uptime.
+	lobby.wallUpdateCounter++
+}
+
+// WallVersion returns a number that changes whenever the wall's contents
+// changed. HTTP clients compare it to detect updates without transferring
+// the whole wall.
+func (lobby *Lobby) WallVersion() uint64 {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	return lobby.wallUpdateCounter
+}
+
+// chatLogCapacity defines how many of the most recent chat messages are
+// kept for HTTP polling.
+const chatLogCapacity = 200
+
+// wallStrokeRecord documents which player appended how many consecutive
+// entries to wallDrawing in one action (one stroke chain or one fill).
+type wallStrokeRecord struct {
+	ownerID uuid.UUID
+	count   int
+}
+
+// ChatUpdates returns all stored messages newer than the given ID. Pass 0
+// to receive the whole recent log. It also reports the latest available ID,
+// which clients pass back as the cursor on their next poll, and the current
+// wall version, so a single request can drive both polling loops. Acquires
+// the lobby mutex itself.
+func (lobby *Lobby) ChatUpdates(sinceID uint64) ([]StoreMessage, uint64, uint64) {
+	lobby.mutex.Lock()
+	defer lobby.mutex.Unlock()
+
+	// Find the first message newer than the cursor. The log is small, so a
+	// linear search is fine and avoids keeping a separate index structure.
+	start := len(lobby.chatLog)
+	for index, storedMessage := range lobby.chatLog {
+		if storedMessage.ID > sinceID {
+			start = index
+			break
+		}
+	}
+
+	updates := make([]StoreMessage, len(lobby.chatLog)-start)
+	copy(updates, lobby.chatLog[start:])
+
+	return updates, lobby.chatCounter, lobby.wallUpdateCounter
 }
 
 // SanitizeName removes invalid characters from the players name, resolves

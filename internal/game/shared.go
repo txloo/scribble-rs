@@ -213,6 +213,13 @@ type OutgoingMessage struct {
 	AuthorID uuid.UUID `json:"authorId"`
 }
 
+// StoreMessage is an OutgoingMessage enriched with a lobby-scoped monotonic
+// ID, which HTTP chat polling uses as a cursor.
+type StoreMessage struct {
+	OutgoingMessage
+	ID uint64 `json:"id"`
+}
+
 // ReadyEvent represents the initial state that a user needs upon connection.
 // This includes all the necessary things for properly running a client
 // without receiving any more data.
@@ -277,6 +284,13 @@ type Player struct {
 	disconnectTime   *time.Time
 	votedForKick     map[uuid.UUID]bool
 	lastKnownAddress string
+	// lastSeen is updated whenever the player interacts with the lobby over
+	// HTTP, e.g. by polling chat. It marks presence for socketless clients
+	// and must never be exposed via JSON.
+	lastSeen time.Time
+	// lastWallStroke throttles HTTP wall strokes, standing in for the
+	// backpressure a websocket connection would provide.
+	lastWallStroke time.Time
 	// messageTimestamps are stored for ratelimiting reasons. See handleMessage.
 	messageTimestamps *Ring[time.Time]
 

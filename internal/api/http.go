@@ -37,6 +37,16 @@ func (handler *V1Handler) SetupRoutes(rootPath string, register func(string, str
 	register("GET", path.Join(v1, "lobby", "ws"), handler.websocketUpgrade)
 
 	register("POST", path.Join(v1, "lobby", "{lobby_id}", "player"), handler.postPlayer)
+
+	// Socketless endpoints for the home page's room: being there never
+	// requires a websocket. They all address the hub implicitly, hence no
+	// lobby id.
+	register("GET", path.Join(v1, "hub", "chat"), handler.getHubChat)
+	register("POST", path.Join(v1, "hub", "chat"), handler.postHubChat)
+	register("GET", path.Join(v1, "hub", "wall"), handler.getHubWall)
+	register("POST", path.Join(v1, "hub", "wall"), handler.postHubWall)
+	register("POST", path.Join(v1, "hub", "wall", "undo"), handler.undoHubWall)
+	register("POST", path.Join(v1, "hub", "wall", "clear"), handler.clearHubWall)
 }
 
 // remoteAddressToSimpleIP removes unnecessary clutter from the input,

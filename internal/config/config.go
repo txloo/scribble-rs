@@ -72,12 +72,19 @@ type Config struct {
 	LobbySettingDefaults LobbySettingDefaults `envPrefix:"LOBBY_SETTING_DEFAULTS_"`
 	LobbySettingBounds   game.SettingBounds   `envPrefix:"LOBBY_SETTING_BOUNDS_"`
 	Port                 uint16               `env:"PORT"`
-	CORS                 CORS                 `envPrefix:"CORS_"`
-	LobbyCleanup         LobbyCleanup         `envPrefix:"LOBBY_CLEANUP_"`
+	// WallFile is the file that the home page's drawing wall is stored in.
+	// It is written periodically and on graceful shutdown, and loaded at
+	// boot. If set to an empty string, wall persistence is disabled.
+	WallFile     string       `env:"WALL_FILE"`
+	CORS         CORS         `envPrefix:"CORS_"`
+	LobbyCleanup LobbyCleanup `envPrefix:"LOBBY_CLEANUP_"`
 }
 
 var Default = Config{
 	Port: 8080,
+	// The wall is stored inside the working directory, since the official
+	// compose setup mounts it, which keeps the wall across restarts.
+	WallFile: "data/wall.json",
 	LobbySettingDefaults: LobbySettingDefaults{
 		Public:             "false",
 		DrawingTime:        "120",

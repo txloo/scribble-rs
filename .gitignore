@@ -21,3 +21,9 @@ public/
 
 # Authoring tool state
 .opencode_data/
+
+# The persistent drawing wall of the home page's room.
+data/
+
+# GCP service account keys - must never be committed.
+*-*3d*.json

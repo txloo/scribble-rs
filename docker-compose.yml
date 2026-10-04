@@ -27,6 +27,8 @@ services:
       - go-build-cache:/root/.cache/go-build
     environment:
       PORT: "8080"
+      # The default wordpack for the home page's room.
+      LOBBY_SETTING_DEFAULTS_LANGUAGE: "spanish"
     # go run does not forward signals reliably; tini reaps and forwards them.
     init: true
     stdin_open: true

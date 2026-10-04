@@ -1,0 +1,153 @@
+{{define "home-page"}}
+<!DOCTYPE html>
+<html lang="{{.Locale}}">
+
+<head>
+    <title>Scribble.rs - Wall</title>
+    <meta charset="UTF-8" />
+    <!-- interactive-widget=resizes-content lets the layout viewport shrink
+    for the mobile keyboard: the typing bar stays anchored above it instead
+    of the page being panned, and home.js re-fits the canvas while typing. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, interactive-widget=resizes-content">
+    {{template "non-static-css-decl" .}}
+    <link rel="stylesheet" type="text/css" href='{{.RootPath}}/resources/{{.WithCacheBust "root.css"}}' />
+    <link rel="stylesheet" type="text/css" href='{{.RootPath}}/resources/{{.WithCacheBust "lobby.css"}}' />
+    <link rel="stylesheet" type="text/css" href='{{.RootPath}}/resources/{{.WithCacheBust "home.css"}}' />
+    {{template "favicon-decl" .}}
+</head>
+
+<body {{if eq .Translation.IsRtl true}} dir="rtl" {{end}}>
+    <div id="app">
+        <noscript><span class="noscript">{{.Translation.Get "requires-js"}}</span></noscript>
+
+        <div id="home">
+            <div id="content-side">
+                <!-- The drawing wall: a wide rectangle everyone may draw
+                on. The wall is never cleared or undone. -->
+                <!-- The internal canvas resolution defines the server
+                coordinate space (1:1); the displayed size is fitted by
+                home.js so the ratio is always preserved. The attribute
+                size is kept small so the unsized canvas can never push
+                the tool rail out of view. -->
+                <canvas id="drawing-board" width="720" height="720"></canvas>
+
+                <!-- The chat: a rectangle below the canvas, sharing its
+                column. The bar only holds the interface language switcher. -->
+                <div id="chat-side">
+                    <div id="chat-bar">
+                        <label for="ui-language-select"
+                            class="chat-bar-item">{{.Translation.Get "ui-language"}}</label>
+                        <select id="ui-language-select" class="chat-bar-item">
+                            {{$locale := .Locale}}
+                            {{range .UILanguages}}
+                            <option value="{{.Locale}}" label="{{.Name}}"
+                                {{if eq $locale .Locale}}selected{{end}}>{{.Name}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+
+                    <div id="chat">
+                        <div id="message-container"></div>
+                        <input id="message-input" type="text" autocomplete="off"
+                            placeholder="{{.Translation.Get "message-input-placeholder"}}" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- The tool rail: its own full-height column, right of the
+            content column. -->
+            <div id="toolbox">
+                <div id="toolbox-inner">
+                    <div class="color-button-container toolbox-group" alt="{{.Translation.Get "change-active-color"}}"
+                        title="{{.Translation.Get "change-active-color"}}">
+                        <!-- These buttons use !important for their color in order
+                        to prevent hover and active colors to appear. -->
+                        <div id="first-color-button-row" class="color-button-row">
+                            <button class="color-button" style="background-color: #ffffff !Important"></button>
+                            <button class="color-button" style="background-color: #c1c1c1 !Important"></button>
+                            <button class="color-button" style="background-color: #ef130b !Important"></button>
+                            <button class="color-button" style="background-color: #ff7100 !Important"></button>
+                            <button class="color-button" style="background-color: #ffe400 !Important"></button>
+                            <button class="color-button" style="background-color: #00cc00 !Important"></button>
+                            <button class="color-button" style="background-color: #00b2ff !Important"></button>
+                            <button class="color-button" style="background-color: #231fd3 !Important"></button>
+                            <button class="color-button" style="background-color: #a300ba !Important"></button>
+                            <button class="color-button" style="background-color: #d37caa !Important"></button>
+                            <button class="color-button" style="background-color: #a0522d !Important"></button>
+                            <button class="color-button" style="background-color: #592f2a !Important"></button>
+                            <button class="color-button" style="background-color: #ecbcb4 !Important"></button>
+                        </div>
+                        <div id="second-color-button-row" class="color-button-row">
+                            <button class="color-button" style="background-color: #000000 !Important"></button>
+                            <button class="color-button" style="background-color: #4c4c4c !Important"></button>
+                            <button class="color-button" style="background-color: #740b07 !Important"></button>
+                            <button class="color-button" style="background-color: #c23800 !Important"></button>
+                            <button class="color-button" style="background-color: #e8a200 !Important"></button>
+                            <button class="color-button" style="background-color: #005510 !Important"></button>
+                            <button class="color-button" style="background-color: #00569e !Important"></button>
+                            <button class="color-button" style="background-color: #0e0865 !Important"></button>
+                            <button class="color-button" style="background-color: #550069 !Important"></button>
+                            <button class="color-button" style="background-color: #a75574 !Important"></button>
+                            <button class="color-button" style="background-color: #63300d !Important"></button>
+                            <button class="color-button" style="background-color: #492f31 !Important"></button>
+                            <button class="color-button" style="background-color: #d1a3a4 !Important"></button>
+                        </div>
+                    </div>
+                    <div class="pencil-sizes-container toolbox-group">
+                        <label for="tool-type-pencil">
+                            <input id="tool-type-pencil" class="custom-check-or-radio line-width-button" type="radio"
+                                name="tool-type" checked>
+                            <div id="tool-type-pencil-wrapper" class="line-width-button-content">
+                                <img id="use-pencil-button-image" title="{{.Translation.Get "use-pencil"}}"
+                                    alt="{{.Translation.Get "use-pencil"}}"
+                                    src='{{.RootPath}}/resources/{{.WithCacheBust "pencil.svg"}}'
+                                    style="transform: scaleX(-1)" />
+                            </div>
+                        </label>
+                        <label for="tool-type-fill">
+                            <input id="tool-type-fill" class="custom-check-or-radio line-width-button" type="radio"
+                                name="tool-type">
+                            <div id="tool-type-fill-wrapper" class="line-width-button-content">
+                                <img id="use-fill-bucket-button-image" alt="{{.Translation.Get "use-fill-bucket"}}"
+                                    title="{{.Translation.Get "use-fill-bucket"}}"
+                                    src='{{.RootPath}}/resources/{{.WithCacheBust "fill.svg"}}' />
+                            </div>
+                        </label>
+                        <label for="tool-type-rubber">
+                            <input id="tool-type-rubber" class="custom-check-or-radio line-width-button" type="radio"
+                                name="tool-type">
+                            <div id="tool-type-rubber-wrapper" class="line-width-button-content">
+                                <img id="use-eraser-button-image" alt="{{.Translation.Get "use-eraser"}}"
+                                    title="{{.Translation.Get "use-eraser"}}"
+                                    src='{{.RootPath}}/resources/{{.WithCacheBust "rubber.svg"}}' />
+                            </div>
+                        </label>
+                    </div>
+                    <div id="size-slider-container" class="pencil-sizes-container toolbox-group">
+                        <input id="size-slider" type="range" min="{{.MinBrushSize}}" max="{{.MaxBrushSize}}"
+                            value="8" step="1">
+                        <span id="size-preview-dot" class="dot"></span>
+                    </div>
+                    <!-- Undo removes your own last stroke from the wall;
+                    clear removes everything. Both act on the shared wall. -->
+                    <button id="undo-button" class="canvas-button toolbox-group" alt="{{.Translation.Get "undo"}}"
+                        title="{{.Translation.Get "undo"}}">
+                        <img id="undo-button-image" alt="{{.Translation.Get "undo"}}" title="{{.Translation.Get "undo"}} "
+                            src='{{.RootPath}}/resources/{{.WithCacheBust "undo.svg"}}' />
+                    </button>
+                    <button id="clear-canvas-button" class="canvas-button toolbox-group"
+                        alt="{{.Translation.Get "clear-canvas"}}" title="{{.Translation.Get "clear-canvas"}}">
+                        <img alt="{{.Translation.Get "clear-canvas"}}" title="{{.Translation.Get "clear-canvas"}}"
+                            src='{{.RootPath}}/resources/{{.WithCacheBust "trash.svg"}}' />
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript" src='{{.RootPath}}/resources/{{.WithCacheBust "draw.js"}}'></script>
+    <script type="module" src='{{.RootPath}}/{{.WithCacheBust "home.js"}}'></script>
+</body>
+
+</html>
+{{end}}

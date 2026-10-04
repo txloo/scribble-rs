@@ -1,0 +1,215 @@
+/* The home page: a drawing rectangle with the toolbox below it, and the
+   chat as a fixed-size rectangle below that. All component styling
+   (toolbox, chat, messages) comes from lobby.css; this file only defines
+   the layout. The canvas display size is fitted by home.js so the aspect
+   ratio is always preserved. */
+
+/* lobby.css shrinks the root font to 0.8rem in its narrow-landscape
+   media query, scaling every rem-based size on the page. Pinning the
+   root font keeps the whole home page (chat strip, slider, radii,
+   paddings, effective icon sizes) constant at every window size.
+   home.css loads after lobby.css, so this wins. */
+html {
+    font-size: 1rem;
+}
+
+#app {
+    /* dvh tracks the real visible viewport (URL bar, keyboard with
+    resizes-content); the plain vh line is the fallback for older
+    browsers. */
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+}
+
+#home {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    gap: 5px;
+    /* No bottom padding: the chat strip is flush with the screen bottom. */
+    padding: 5px 5px 0;
+    overflow: hidden;
+}
+
+/* The content column: the canvas on top, the chat below it. Both share
+   this column, so the chat can never sit over the tool rail. */
+#content-side {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    overflow: hidden;
+}
+
+#home #drawing-board {
+    /* lobby.css positions the lobby's canvas absolutely (for its inner
+    wrapper setup); that must not leak onto the home page, or the canvas
+    leaves the flex flow and covers the tool rail. */
+    position: static;
+    flex: 0 1 auto;
+    min-height: 0;
+    display: block;
+    background-color: white;
+    user-select: none;
+    border-radius: var(--component-border-radius);
+}
+
+/* The toolbox is a vertical rail in its own full-height column, right of
+   the content column. It stays at its natural, constant size; when the
+   window is too short for its content, it scrolls internally instead of
+   being cut or overflowing. */
+#home #toolbox {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: center;
+    width: min-content;
+    height: auto;
+    user-select: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#toolbox-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+#home .color-button-container {
+    flex-direction: row;
+    height: auto;
+    width: min-content;
+}
+
+#home .color-button-row {
+    flex-direction: column;
+}
+
+#home .pencil-sizes-container {
+    flex-direction: column;
+}
+
+#chat-side {
+    /* ~10 single-line chat messages (one line ≈ 2rem with padding). */
+    flex: 0 0 20rem;
+    /* Stretch to the content column's full width, so the chat is always
+    at least as wide as the canvas above it (the canvas never exceeds the
+    column except on absurdly narrow windows, which the min-width covers
+    by matching the canvas' hard floor). */
+    align-self: stretch;
+    min-width: 100px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+#chat-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    background-color: var(--component-base-color);
+    border-radius: var(--component-border-radius)
+        var(--component-border-radius) 0 0;
+}
+
+#chat-bar label {
+    font-weight: 600;
+    color: #222;
+    white-space: nowrap;
+}
+
+#ui-language-select {
+    flex: 1;
+    min-width: 0;
+    padding: 0.25rem 0.5rem;
+    color: #222;
+    border-radius: var(--component-border-radius);
+    border: 1px solid #eee5e9;
+}
+
+#home #chat {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    background-color: var(--component-base-color);
+    border-radius: 0 0 var(--component-border-radius)
+        var(--component-border-radius);
+}
+
+#home #message-container {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.5rem;
+}
+
+#home #message-input {
+    border: none;
+    border-top: 1px solid #eee5e9;
+    padding: 0.6rem;
+}
+
+/* The brush size slider: a real drag slider, not a text field. The active
+   color is applied via --slider-color, which home.js keeps up to date. */
+#size-slider-container {
+    gap: 0.5rem;
+}
+
+/* The brush size slider: a real vertical drag slider, not a text field.
+   writing-mode turns the native range input vertical (with direction rtl
+   the max size sits at the top, matching intuition). The active color is
+   applied via accent-color, which home.js keeps up to date. */
+#size-slider {
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 1.5rem;
+    height: 8rem;
+    accent-color: var(--slider-color, #000000);
+    /* Sliding must not scroll or zoom the page on touch devices. */
+    touch-action: none;
+    align-self: center;
+}
+
+#size-preview-dot {
+    align-self: center;
+}
+
+/* Neutralize lobby.css's mobile-only (max-width: 812px) shrinks, so the
+   rail looks identical at every window size. ID-scoped rules outrank
+   those class rules at all widths. */
+#home .color-button {
+    width: 24px;
+    height: 24px;
+}
+
+#home .canvas-button,
+#home .line-width-button-content {
+    width: 50px;
+    height: 50px;
+}
+
+#home .line-width-button-content > *,
+#home .canvas-button > * {
+    width: 40px;
+    height: 40px;
+}
+
+/* The chat's height is governed by the fixed strip; lobby.css caps the
+   message container at 5rem on portrait phones, which must not apply. */
+#home #message-container {
+    max-height: none;
+}
+
