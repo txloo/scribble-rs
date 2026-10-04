@@ -12,11 +12,32 @@ jobs:
         with:
           fetch-depth: 0 # full history for `git describe`
 
-      - uses: google-github-actions/auth@v2
-        id: auth
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-          token_format: access_token
+      - name: Sign in to Google Cloud
+        id: gcp
+        env:
+          SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$SA_KEY"
+          echo "$SA_KEY" > sa.json
+          jq -r .private_key sa.json > key.pem
+          openssl pkey -in key.pem -check -noout
+          CLIENT_EMAIL=$(jq -r .client_email sa.json)
+          PROJECT_ID=$(jq -r .project_id sa.json)
+          b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+          NOW=$(date +%s)
+          HS=$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | b64url)
+          CS=$(printf '%s' "{\"iss\":\"$CLIENT_EMAIL\",\"scope\":\"https://www.googleapis.com/auth/cloud-platform\",\"aud\":\"https://oauth2.googleapis.com/token\",\"exp\":$((NOW+1200)),\"iat\":$NOW}" | b64url)
+          SIG=$(printf '%s' "$HS.$CS" | openssl dgst -sha256 -sign key.pem | b64url)
+          TOKEN=$(curl -s https://oauth2.googleapis.com/token -d "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=$HS.$CS.$SIG" | jq -r .access_token)
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Token exchange failed"
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          echo "access_token=$TOKEN" >> "$GITHUB_OUTPUT"
+          echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
+          rm -f key.pem sa.json
 
       - uses: docker/setup-buildx-action@v3
 
@@ -24,13 +45,13 @@ jobs:
         with:
           registry: southamerica-east1-docker.pkg.dev
           username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
+          password: ${{ steps.gcp.outputs.access_token }}
 
       - uses: docker/build-push-action@v6
         with:
           file: linux.Dockerfile
           push: true
-          tags: southamerica-east1-docker.pkg.dev/${{ steps.auth.outputs.project_id }}/scribble-rs/scribble-rs:latest
+          tags: southamerica-east1-docker.pkg.dev/${{ steps.gcp.outputs.project_id }}/scribble-rs/scribble-rs:latest
           build-args: VERSION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
