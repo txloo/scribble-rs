@@ -138,11 +138,11 @@ func (client *Client) FillTranslations(messages []game.StoreMessage, targetLangu
 		// showing the original twice is noise. They are still cached (with
 		// an empty translation), so subsequent deliveries don't hit the
 		// API again.
-		if normalizeLanguage(translation.detectedSourceLanguage) == targetLanguage {
+		if normalizeLanguage(translation.DetectedSourceLanguage) == targetLanguage {
 			for _, index := range entry.indices {
 				client.cache[cacheKey(messages[index].ID, targetLanguage)] = &cachedTranslation{
 					text:           "",
-					sourceLanguage: translation.detectedSourceLanguage,
+					sourceLanguage: translation.DetectedSourceLanguage,
 				}
 			}
 			continue
@@ -150,8 +150,8 @@ func (client *Client) FillTranslations(messages []game.StoreMessage, targetLangu
 
 		for _, index := range entry.indices {
 			client.cache[cacheKey(messages[index].ID, targetLanguage)] = &cachedTranslation{
-				text:           translation.text,
-				sourceLanguage: translation.detectedSourceLanguage,
+				text:           translation.Text,
+				sourceLanguage: translation.DetectedSourceLanguage,
 			}
 		}
 	}
